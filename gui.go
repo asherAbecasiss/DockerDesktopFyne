@@ -27,6 +27,8 @@ func (d *DockerApi) Run() {
 	myWindow.Resize(fyne.NewSize(1420, 800))
 
 	tab := d.getDockerTab()
+	swarm := d.GetSwarmTab()
+	service := d.GetServicesTab()
 
 	dockerTab := d.GetDockerTab(tab)
 	// toolbar := widget.NewToolbar(
@@ -46,7 +48,9 @@ func (d *DockerApi) Run() {
 	// )
 
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Docker", dockerTab),
+		container.NewTabItem("Docker ", dockerTab),
+		container.NewTabItem("Swarm ", swarm),
+		container.NewTabItem("Services ", service),
 	)
 	text1 := canvas.NewText("Admin101", color.Black)
 	text1.TextSize = 20
@@ -56,20 +60,6 @@ func (d *DockerApi) Run() {
 
 	myWindow.SetContent(grid7)
 	myWindow.ShowAndRun()
-}
-
-func (d *DockerApi) getTabel() *widget.List {
-	list := widget.NewList(
-		func() int {
-			return len(data)
-		},
-		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			o.(*widget.Label).SetText(data[i])
-		})
-	return list
 }
 
 func (d *DockerApi) GetList() []container.TabItem {
@@ -171,7 +161,7 @@ func (d *DockerApi) GetDockerTab(tab *container.AppTabs) *fyne.Container {
 	lenContainer := "Docker Container " + strconv.Itoa(len(tab.Items))
 	card := widget.NewCard(lenContainer, "W", toolbar)
 	grid2 := container.New(layout.NewVBoxLayout(),
-		
+
 		card,
 	)
 
@@ -191,7 +181,7 @@ func (d *DockerApi) getDockerTab() *container.AppTabs {
 	tabs.SetTabLocation(container.TabLocationLeading)
 	return tabs
 }
-func (d *DockerApi) updateTime(clock *container.AppTabs) int{
+func (d *DockerApi) updateTime(clock *container.AppTabs) int {
 	fmt.Println("restart")
 	temp := d.GetList()
 
@@ -204,5 +194,194 @@ func (d *DockerApi) updateTime(clock *container.AppTabs) int{
 	tabs.SetTabLocation(container.TabLocationLeading)
 	clock.Items = tabs.Items
 	return len(temp)
+
+}
+
+//Swarm
+
+func (d *DockerApi) GetSwarmListGui() []container.TabItem {
+	dockerList := d.GetSwarmNode()
+	var list []container.TabItem
+
+	for _, v := range dockerList {
+
+		Id := canvas.NewText("Id: "+v.ID, color.Black)
+		formatted := v.CreatedAt.Format("Created At: 2006-01-02 03:04:05 UTC")
+		CreatedAt := canvas.NewText(formatted, color.Black)
+		ManagerStatus := canvas.NewText("Worker ", color.Black)
+		if v.ManagerStatus != nil {
+			ManagerStatus = canvas.NewText("Manager "+v.ManagerStatus.Addr, color.Black)
+		}
+
+		Id.TextSize = TXT_SIZE
+		ManagerStatus.TextSize = TXT_SIZE
+
+		id := binding.NewString()
+		id.Set(v.ID)
+		list = append(list, container.TabItem{
+			Text: v.Description.Hostname,
+			Content: container.New(layout.NewGridLayout(1),
+				container.New(layout.NewVBoxLayout(),
+					container.New(layout.NewGridLayout(4),
+						widget.NewButton("Restart", func() {
+
+							log.Println("tapped")
+							s, _ := id.Get()
+							d.RestartContainerID(s)
+						}),
+						widget.NewButton("cl", func() {
+							log.Println("tapped")
+						}),
+					),
+					ManagerStatus,
+					Id,
+					CreatedAt,
+				),
+			),
+		})
+
+	}
+
+	return list
+}
+
+func (d *DockerApi) GetServicesListGui() []container.TabItem {
+	dockerList := d.GetDockerServices()
+	var list []container.TabItem
+
+	for _, v := range dockerList {
+
+		Id := canvas.NewText("Id: "+v.ID, color.Black)
+		RunningTasks := canvas.NewText("RunningTasks: "+strconv.FormatUint(uint64(v.Version.Index), 10), color.Black)
+		Name := canvas.NewText("Service Name: "+v.Spec.Name, color.Black)
+		formatted := v.CreatedAt.Format("Created At: 2006-01-02 03:04:05 UTC")
+		CreatedAt := canvas.NewText(formatted, color.Black)
+		ManagerStatus := canvas.NewText("Worker ", color.Black)
+		Image := canvas.NewText("Image: "+v.Spec.TaskTemplate.ContainerSpec.Image, color.Black)
+
+		Id.TextSize = TXT_SIZE
+		Image.TextSize = TXT_SIZE
+		ManagerStatus.TextSize = TXT_SIZE
+
+		id := binding.NewString()
+		id.Set(v.ID)
+		list = append(list, container.TabItem{
+			Text: v.Spec.Name,
+			Content: container.New(layout.NewGridLayout(1),
+				container.New(layout.NewVBoxLayout(),
+					container.New(layout.NewGridLayout(4),
+						widget.NewButton("Remove", func() {
+
+							log.Println("tapped -->")
+							s, _ := id.Get()
+							d.DockerServicesUpdate(s)
+						}),
+						widget.NewButton("cl", func() {
+							log.Println("tapped")
+						}),
+					),
+					Name,
+					ManagerStatus,
+					RunningTasks,
+					Id,
+					CreatedAt,
+					Image,
+				),
+			),
+		})
+
+	}
+
+	return list
+}
+
+func (d *DockerApi) GetSwarmTab() *fyne.Container {
+	temp := d.GetSwarmListGui()
+
+	tabs := container.NewAppTabs()
+
+	for i, _ := range temp {
+		tabs.Append(&temp[i])
+	}
+	tabs.SetTabLocation(container.TabLocationLeading)
+
+	lenContainer := strconv.Itoa(len(tabs.Items)) + " Nodes"
+	text1 := canvas.NewText("1", color.Black)
+	card := widget.NewCard(lenContainer, "W", text1)
+	grid2 := container.New(layout.NewVBoxLayout(),
+
+		card,
+	)
+
+	grid7 := container.NewBorder(grid2, nil, tabs, nil, nil)
+
+	return grid7
+
+}
+
+func (d *DockerApi) UpdateServicesTab(clock *container.AppTabs, n *int) int {
+	fmt.Println("restart")
+	temp := d.GetServicesListGui()
+
+	tabs := *container.NewAppTabs()
+
+	for i, _ := range temp {
+		tabs.Append(&temp[i])
+	}
+
+	tabs.SetTabLocation(container.TabLocationLeading)
+	clock.Items = tabs.Items
+	*n = len(tabs.Items)
+	return len(clock.Items)
+
+}
+
+func (d *DockerApi) GetServicesTab() *fyne.Container {
+	temp := d.GetServicesListGui()
+
+	tabs := container.NewAppTabs()
+
+	for i, _ := range temp {
+		tabs.Append(&temp[i])
+	}
+	var n *int = new(int)
+
+	*n = len(tabs.Items)
+
+	num := binding.NewString()
+	num.Set(strconv.Itoa(len(tabs.Items)))
+	tabs.SetTabLocation(container.TabLocationLeading)
+	toolbar := widget.NewToolbar(
+		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
+			log.Println("New document")
+
+			s := d.UpdateServicesTab(tabs, n)
+			num.Set(strconv.Itoa(s))
+			fmt.Println(s)
+
+			// tabs.Refresh()
+		}),
+		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.ContentCutIcon(), func() {}),
+		widget.NewToolbarAction(theme.ContentCopyIcon(), func() {}),
+		widget.NewToolbarAction(theme.ContentPasteIcon(), func() {}),
+		widget.NewToolbarSpacer(),
+		widget.NewToolbarAction(theme.HelpIcon(), func() {
+			log.Println("Display help")
+		}),
+	)
+	s1 := strconv.Itoa(*n)
+
+	lenContainer := s1 + " Services"
+	text1 := canvas.NewText("1", color.Black)
+	card := widget.NewCard(lenContainer, "W", text1)
+	grid2 := container.New(layout.NewVBoxLayout(),
+		card,
+		toolbar,
+	)
+
+	grid7 := container.NewBorder(grid2, nil, tabs, nil, nil)
+
+	return grid7
 
 }
